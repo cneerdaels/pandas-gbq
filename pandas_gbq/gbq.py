@@ -197,15 +197,20 @@ class TableCreationError(ValueError):
 
 
 class GbqConnector(object):
-    scope = 'https://www.googleapis.com/auth/bigquery'
+    _GOOGLE_DEFAULT_OAUTH_SCOPE = 'https://www.googleapis.com/auth/bigquery'
 
     def __init__(self, project_id, reauth=False, verbose=False,
-                 private_key=None, auth_local_webserver=False,
+                 private_key=None, scope=None, auth_local_webserver=False,
                  dialect='legacy'):
         self.project_id = project_id
         self.reauth = reauth
         self.verbose = verbose
         self.private_key = private_key
+        if( scope ):
+            self.scope = scope
+        else:
+            self.scope = self._GOOGLE_DEFAULT_OAUTH_SCOPE
+
         self.auth_local_webserver = auth_local_webserver
         self.dialect = dialect
         self.credentials = self.get_credentials()
@@ -391,7 +396,7 @@ class GbqConnector(object):
                     json_key['private_key'], 'UTF-8')
 
             credentials = Credentials.from_service_account_info(json_key)
-            credentials = credentials.with_scopes([self.scope])
+            credentials = credentials.with_scopes(self.scope)
 
             # Refresh the token before trying to use it.
             http = httplib2.Http()
@@ -504,6 +509,7 @@ class GbqConnector(object):
             }
         }
         config = kwargs.get('configuration')
+
         if config is not None:
             if len(config) != 1:
                 raise ValueError("Only one job type must be specified, but "
@@ -834,7 +840,7 @@ def _parse_entry(field_value, field_type):
 
 
 def read_gbq(query, project_id=None, index_col=None, col_order=None,
-             reauth=False, verbose=True, private_key=None,
+             reauth=False, verbose=True, private_key=None, scope=None,
              auth_local_webserver=False, dialect='legacy', **kwargs):
     r"""Load data from Google BigQuery.
 
@@ -859,6 +865,17 @@ def read_gbq(query, project_id=None, index_col=None, col_order=None,
 
       Service account credentials will be used to authenticate.
 
+    - If "scope" is not provided:
+
+      By default is 'https://www.googleapis.com/auth/bigquery'
+
+    - If "scope" is provided:
+
+      It will be used to set the authenication scope with Google.
+      For federated data in Google Drive, you need
+      ['https://www.googleapis.com/auth/bigquery',
+      'https://www.googleapis.com/auth/drive']
+
     Parameters
     ----------
     query : str
@@ -879,6 +896,8 @@ def read_gbq(query, project_id=None, index_col=None, col_order=None,
         Service account private key in JSON format. Can be file path
         or string contents. This is useful for remote server
         authentication (eg. jupyter iPython notebook on remote host)
+    scope : list (optional)
+        list of scopes for Google auth
     auth_local_webserver : boolean, default False
         Use the [local webserver flow] instead of the [console flow] when
         getting user credentials. A file named bigquery_credentials.dat will
@@ -925,7 +944,7 @@ def read_gbq(query, project_id=None, index_col=None, col_order=None,
 
     connector = GbqConnector(
         project_id, reauth=reauth, verbose=verbose, private_key=private_key,
-        dialect=dialect, auth_local_webserver=auth_local_webserver)
+        scope=scope, dialect=dialect, auth_local_webserver=auth_local_webserver)
     schema, pages = connector.run_query(query, **kwargs)
     dataframe_list = []
     while len(pages) > 0:
@@ -1118,7 +1137,7 @@ def _generate_bq_schema(df, default_type='STRING'):
 class _Table(GbqConnector):
 
     def __init__(self, project_id, dataset_id, reauth=False, verbose=False,
-                 private_key=None):
+                 private_key=None, scope=None):
         try:
             from googleapiclient.errors import HttpError
         except:
@@ -1217,7 +1236,7 @@ class _Table(GbqConnector):
 class _Dataset(GbqConnector):
 
     def __init__(self, project_id, reauth=False, verbose=False,
-                 private_key=None):
+                 private_key=None, scope=None):
         try:
             from googleapiclient.errors import HttpError
         except:
